@@ -45,8 +45,9 @@ const {
   modelStatus,
   isDownloadingModel,
   downloadProgress,
+  modelFolder,
 } = storeToRefs(zImageStore)
-const { fetchModels, startGeneration, stopGeneration, selectOutputFolder, checkModel, checkAllModels, downloadModel } = zImageStore
+const { fetchModels, startGeneration, stopGeneration, selectOutputFolder, checkModel, checkAllModels, downloadModel, selectModelFolder } = zImageStore
 
 const message = useMessage()
 const { ipcRenderer } = window.electron
@@ -110,12 +111,32 @@ watch(logs, async () => {
 })
 
 // Actions
+// Validation
+const canGenerate = computed(() => {
+  if (isGenerating.value)
+    return true // Allow stopping
+  return !!modelFolder.value && !!outputFolder.value
+})
+
+const validationMessage = computed(() => {
+  if (!modelFolder.value)
+    return t('validation.modelFolderRequired')
+  if (!outputFolder.value)
+    return t('validation.outputFolderRequired')
+  return ''
+})
+
 function handleGenerate(): void {
   if (!prompt.value)
     return
 
   if (isGenerating.value) {
     stopGeneration()
+    return
+  }
+
+  if (!canGenerate.value) {
+    message.warning(validationMessage.value)
     return
   }
 
@@ -253,20 +274,21 @@ const gridStyle = computed(() => {
 
         <!-- Actions -->
         <div class="actions-container">
-          <NButton
-            v-if="!isGenerating"
-            type="primary"
-            round
-            size="large"
-            class="generate-button"
-            :disabled="!prompt"
-            @click="handleGenerate"
-          >
-            <template #icon>
-              <NIcon><PlayOutline /></NIcon>
-            </template>
-            {{ t('common.generate') }}
-          </NButton>
+          <div v-if="!isGenerating" class="generate-btn-wrapper">
+            <NButton
+              type="primary"
+              round
+              size="large"
+              class="generate-button"
+              :disabled="!prompt"
+              @click="handleGenerate"
+            >
+              <template #icon>
+                <NIcon><PlayOutline /></NIcon>
+              </template>
+              {{ t('common.generate') }}
+            </NButton>
+          </div>
 
           <NButton
             v-else
@@ -335,11 +357,24 @@ const gridStyle = computed(() => {
     <NModal v-model:show="showSettings">
       <div class="settings-card glass-modal">
         <div class="settings-grid">
+          <!-- Model Folder -->
+          <div class="setting-item full-width">
+            <label>{{ t('settings.modelFolder') }}</label>
+            <div class="folder-input">
+              <NInput v-model:value="modelFolder" readonly round class="glass-input-sm" :placeholder="t('placeholder.selectModelFolder')" />
+              <NButton class="glass-button-sm" @click="selectModelFolder">
+                <template #icon>
+                  <NIcon><FolderOpenOutline /></NIcon>
+                </template>
+              </NButton>
+            </div>
+          </div>
+
           <!-- Output -->
           <div class="setting-item full-width">
             <label>{{ t('settings.outputFolder') }}</label>
             <div class="folder-input">
-              <NInput v-model:value="outputFolder" readonly class="glass-input-sm" />
+              <NInput v-model:value="outputFolder" readonly round class="glass-input-sm" />
               <NButton class="glass-button-sm" @click="selectOutputFolder">
                 <template #icon>
                   <NIcon><FolderOpenOutline /></NIcon>
@@ -353,10 +388,9 @@ const gridStyle = computed(() => {
             <label>{{ t('settings.negativePrompt') }}</label>
             <NInput
               v-model:value="negativePrompt"
-              type="textarea"
               :placeholder="t('placeholder.negativePrompt')"
-              :rows="2"
               class="glass-input-sm"
+              round
             />
           </div>
 
@@ -384,6 +418,7 @@ const gridStyle = computed(() => {
                     size="small"
                     :type="availableModels.includes(model.id) ? 'success' : 'primary'"
                     secondary
+                    round
                     :loading="!!isDownloadingModel[model.id] && !!modelStatus[model.id] && modelStatus[model.id]?.missingFiles.length > 0"
                     @click="() => {
                       if (!availableModels.includes(model.id)) {
@@ -414,13 +449,13 @@ const gridStyle = computed(() => {
           <!-- Steps -->
           <div class="setting-item">
             <label>{{ t('settings.steps') }}</label>
-            <NInput v-model:value="stepsStr" :placeholder="t('settings.auto')" class="glass-input-sm" />
+            <NInput v-model:value="stepsStr" :placeholder="t('settings.auto')" round class="glass-input-sm" />
           </div>
 
           <!-- Seed -->
           <div class="setting-item">
             <label>{{ t('settings.seed') }}</label>
-            <NInput v-model:value="seedStr" :placeholder="t('settings.rand')" class="glass-input-sm" />
+            <NInput v-model:value="seedStr" :placeholder="t('settings.rand')" round class="glass-input-sm" />
           </div>
 
           <!-- Count -->
@@ -432,7 +467,7 @@ const gridStyle = computed(() => {
           <!-- GPU -->
           <div class="setting-item">
             <label>{{ t('settings.gpuId') }}</label>
-            <NInput v-model:value="gpuIdStr" :placeholder="t('settings.auto')" class="glass-input-sm" />
+            <NInput v-model:value="gpuIdStr" :placeholder="t('settings.auto')" round class="glass-input-sm" />
           </div>
 
           <!-- Language -->
@@ -699,8 +734,12 @@ $radius-sm: 12px;
 .glass-input-sm, .glass-select {
   :deep(.n-input), :deep(.n-base-selection) {
     background-color: rgba(255,255,255,0.5);
-    border-radius: $radius-sm;
+    border-radius: 20px !important;
   }
+}
+
+.glass-button-sm {
+  border-radius: 20px !important;
 }
 
 .glass-drawer {
